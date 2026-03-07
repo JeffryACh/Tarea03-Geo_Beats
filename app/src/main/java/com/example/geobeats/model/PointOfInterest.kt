@@ -1,3 +1,3 @@
 package com.example.geobeats.model
 
-data class PointOfInterest()
+//data class PointOfInterest()
