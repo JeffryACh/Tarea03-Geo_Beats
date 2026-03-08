@@ -2,6 +2,7 @@ package com.example.geobeats.spotify
 
 import android.content.Context
 import android.util.Log
+import com.example.geobeats.BuildConfig // Importamos las variables seguras
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
@@ -9,8 +10,9 @@ import com.spotify.protocol.types.PlayerState
 
 class SpotifyManager(private val context: Context) {
 
-    private val CLIENT_ID = "d788f4c7ff9944af90d093bb347e413c"
-    private val REDIRECT_URI = "https://GeoBeats.com/callback"
+    // Ahora las llaves se leen de forma segura y no están expuestas en el código fuente
+    private val CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
+    private val REDIRECT_URI = BuildConfig.SPOTIFY_REDIRECT_URI
 
     private var spotifyAppRemote: SpotifyAppRemote? = null
 
@@ -36,7 +38,9 @@ class SpotifyManager(private val context: Context) {
                 appRemote.playerApi.subscribeToPlayerState()
                     .setEventCallback { playerState: PlayerState ->
                         val track = playerState.track
-                        Log.d("SpotifyManager", "🎵 Reproduciendo: ${track.name} - ${track.artist.name}")
+                        if (track != null) {
+                            Log.d("SpotifyManager", "🎵 Reproduciendo: ${track.name} - ${track.artist.name}")
+                        }
                     }
 
                 onConnected()

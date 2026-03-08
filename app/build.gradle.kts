@@ -1,7 +1,16 @@
+import java.util.Properties // Importación necesaria para leer el archivo
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.android.libraries.mapsplatform.secrets.gradle.plugin)
+}
+
+// Cargar las variables de local.properties
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
 
 android {
@@ -18,6 +27,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Inyectar las llaves de Spotify como Strings en la clase autogenerada BuildConfig
+        val spotifyClientId = localProperties.getProperty("SPOTIFY_CLIENT_ID") ?: ""
+        val spotifyRedirectUri = localProperties.getProperty("SPOTIFY_REDIRECT_URI") ?: ""
+
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
+        buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"$spotifyRedirectUri\"")
     }
 
     buildTypes {
@@ -36,6 +52,8 @@ android {
     buildFeatures {
         compose = true
         viewBinding = true
+        // Habilitar la generación de la clase BuildConfig para usar las llaves en el código
+        buildConfig = true
     }
 }
 
