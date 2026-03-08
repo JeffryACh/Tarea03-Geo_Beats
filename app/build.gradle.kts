@@ -1,14 +1,13 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.android.libraries.mapsplatform.secrets.gradle.plugin)
 }
 
 android {
     namespace = "com.example.geobeats"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(33)
     }
 
     defaultConfig {
@@ -36,6 +35,7 @@ android {
     }
     buildFeatures {
         compose = true
+        viewBinding = true
     }
 }
 
@@ -50,6 +50,11 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation(libs.play.services.maps)
+    implementation(libs.androidx.appcompat)
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

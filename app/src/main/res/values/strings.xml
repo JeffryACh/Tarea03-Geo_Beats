@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Geo Beats</string>
+    <string name="title_activity_geo_beats">GeoBeats</string>
 </resources>
