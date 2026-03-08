@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.example.geobeats"
     compileSdk {
-        version = release(33)
+        version = release(34)
     }
 
     defaultConfig {
