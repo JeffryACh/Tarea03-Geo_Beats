@@ -58,6 +58,12 @@ android {
 }
 
 dependencies {
+    // Agrega esto en tu bloque de dependencias
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
+    // ... tus otras dependencias ...
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
+    // ¡NUEVO! Librería requerida internamente por el SDK de Spotify
+    implementation("com.google.code.gson:gson:2.10.1")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

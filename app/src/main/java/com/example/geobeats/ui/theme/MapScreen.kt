@@ -6,13 +6,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext // Importante para el contexto
-import com.example.geobeats.spotify.SpotifyManager // Importante para enlazar Spotify
+import androidx.compose.ui.platform.LocalContext
+import com.example.geobeats.spotify.SpotifyManager
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
@@ -21,11 +22,17 @@ import com.google.android.gms.maps.model.MarkerOptions
 fun MapScreen() {
     var hasLocationPermission by remember { mutableStateOf(false) }
 
-    // 1. Extraemos el contexto correctamente
     val context = LocalContext.current
-
-    // 2. Instanciamos la clase SpotifyManager usando remember para que sobreviva a las recomposiciones de la UI
     val spotifyManager = remember { SpotifyManager(context) }
+
+    // ¡NUEVO! 🛡️ Protección contra Memory Leaks de Spotify
+    // Esto asegura que la conexión se cierre si la app pasa a segundo plano o se destruye la vista
+    DisposableEffect(Unit) {
+        onDispose {
+            spotifyManager.disconnect()
+            Log.d("MapScreen", "Limpieza de memoria: Spotify desconectado.")
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -48,14 +55,16 @@ fun MapScreen() {
             onMapReady = { googleMap ->
                 googleMap.uiSettings.isZoomControlsEnabled = true
 
-                // Activar el punto azul de ubicación en tiempo real
                 try {
                     googleMap.isMyLocationEnabled = true
                 } catch (e: SecurityException) {
                     Log.e("MapScreen", "Permisos no concedidos")
                 }
 
-                // Definir tu punto de interés (Ej: TEC en Cartago)
+                // ¡NUEVO! 🛡️ Limpiar el mapa para evitar sobrecarga de RAM por recomposiciones
+                googleMap.clear()
+
+                // Definir tu punto de interés
                 val puntoInteres = LatLng(9.8563, -83.9127)
 
                 googleMap.addMarker(
@@ -65,6 +74,8 @@ fun MapScreen() {
                         .snippet("Toca aquí para iniciar la banda sonora")
                 )
 
+                // Solo movemos la cámara la primera vez, puedes evitar que se mueva constantemente
+                // si lo extraes a un LaunchedEffect, pero por ahora esto evitará el cierre abrupto.
                 googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(puntoInteres, 15f))
 
                 // Evento de clic en el marcador
@@ -73,7 +84,6 @@ fun MapScreen() {
 
                     val playlistUri = "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1"
 
-                    // 3. Usamos la instancia de spotifyManager y la nueva función connectAndPlay
                     spotifyManager.connectAndPlay(
                         playlistUri = playlistUri,
                         onConnected = { Log.d("MapScreen", "¡Música iniciada desde el mapa!") },

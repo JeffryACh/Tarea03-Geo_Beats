@@ -21,37 +21,49 @@ class SpotifyManager(private val context: Context) {
         onConnected: () -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
+        // 1. ESCUDO: Si ya estamos conectados, solo reproducimos y evitamos reconectar
+        if (spotifyAppRemote?.isConnected == true) {
+            Log.d("SpotifyManager", "⚡ Ya hay conexión. Reproduciendo...")
+            spotifyAppRemote?.playerApi?.play(playlistUri)
+            onConnected()
+            return
+        }
+
         val connectionParams = ConnectionParams.Builder(CLIENT_ID)
             .setRedirectUri(REDIRECT_URI)
             .showAuthView(true)
             .build()
 
-        SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
-            override fun onConnected(appRemote: SpotifyAppRemote) {
-                spotifyAppRemote = appRemote
-                Log.d("SpotifyManager", "✅ Conectado a Spotify App Remote!")
+        // 2. ESCUDO: Envolver el intento de conexión en un try-catch
+        try {
+            SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
+                override fun onConnected(appRemote: SpotifyAppRemote) {
+                    spotifyAppRemote = appRemote
+                    Log.d("SpotifyManager", "✅ Conectado a Spotify App Remote!")
+                    appRemote.playerApi.play(playlistUri)
 
-                // Reproduce la playlist del lugar automáticamente
-                appRemote.playerApi.play(playlistUri)
-
-                // Muestra en Log qué canción está sonando
-                appRemote.playerApi.subscribeToPlayerState()
-                    .setEventCallback { playerState: PlayerState ->
-                        val track = playerState.track
-                        if (track != null) {
-                            Log.d("SpotifyManager", "🎵 Reproduciendo: ${track.name} - ${track.artist.name}")
+                    appRemote.playerApi.subscribeToPlayerState()
+                        .setEventCallback { playerState: PlayerState ->
+                            val track = playerState.track
+                            if (track != null) {
+                                Log.d("SpotifyManager", "🎵 Sonando: ${track.name} - ${track.artist.name}")
+                            }
                         }
-                    }
+                    onConnected()
+                }
 
-                onConnected()
-            }
-
-            override fun onFailure(throwable: Throwable) {
-                val errorMsg = "❌ Error de conexión: ${throwable.message}"
-                Log.e("SpotifyManager", errorMsg, throwable)
-                onError(errorMsg)
-            }
-        })
+                override fun onFailure(throwable: Throwable) {
+                    val errorMsg = "❌ Error de conexión: ${throwable.message}"
+                    Log.e("SpotifyManager", errorMsg, throwable)
+                    onError(errorMsg)
+                }
+            })
+        } catch (e: Exception) {
+            // Si la app de Spotify no existe o hay un error fatal, lo atrapamos aquí sin que la app se cierre
+            val errorFatal = "CRÍTICO al conectar: ${e.message}"
+            Log.e("SpotifyManager", errorFatal, e)
+            onError(errorFatal)
+        }
     }
 
     fun disconnect() {
