@@ -25,8 +25,7 @@ fun MapScreen() {
     val context = LocalContext.current
     val spotifyManager = remember { SpotifyManager(context) }
 
-    // ¡NUEVO! 🛡️ Protección contra Memory Leaks de Spotify
-    // Esto asegura que la conexión se cierre si la app pasa a segundo plano o se destruye la vista
+    // 🛡️ Protección contra Memory Leaks
     DisposableEffect(Unit) {
         onDispose {
             spotifyManager.disconnect()
@@ -61,36 +60,35 @@ fun MapScreen() {
                     Log.e("MapScreen", "Permisos no concedidos")
                 }
 
-                // ¡NUEVO! 🛡️ Limpiar el mapa para evitar sobrecarga de RAM por recomposiciones
+                // 🛡️ Limpiar el mapa antes de dibujar
                 googleMap.clear()
 
                 // Definir tu punto de interés
                 val puntoInteres = LatLng(9.8563, -83.9127)
+                val playlistUri = "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1"
 
                 googleMap.addMarker(
                     MarkerOptions()
                         .position(puntoInteres)
                         .title("Campus TEC")
-                        .snippet("Toca aquí para iniciar la banda sonora")
                 )
 
-                // Solo movemos la cámara la primera vez, puedes evitar que se mueva constantemente
-                // si lo extraes a un LaunchedEffect, pero por ahora esto evitará el cierre abrupto.
                 googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(puntoInteres, 15f))
 
-                // Evento de clic en el marcador
+                // Evento DIRECTO: Comportamiento al tocar el PIN ROJO
                 googleMap.setOnMarkerClickListener { marker ->
-                    Log.d("MapScreen", "Marcador tocado: ${marker.title}")
+                    Log.d("MapScreen", "Pin rojo tocado: ${marker.title}")
 
-                    val playlistUri = "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1"
-
+                    // Disparamos la música de una vez
                     spotifyManager.connectAndPlay(
                         playlistUri = playlistUri,
-                        onConnected = { Log.d("MapScreen", "¡Música iniciada desde el mapa!") },
+                        onConnected = { Log.d("MapScreen", "¡Música iniciada desde el pin!") },
                         onError = { error -> Log.e("MapScreen", "Problema al iniciar: $error") }
                     )
 
-                    false
+                    // Al retornar 'true' le decimos al mapa:
+                    // "Ya me encargué del clic, no muestres el cuadro blanco"
+                    true
                 }
             }
         )
