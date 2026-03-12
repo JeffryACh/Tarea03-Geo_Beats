@@ -2,7 +2,7 @@ package com.example.geobeats.spotify
 
 import android.content.Context
 import android.util.Log
-import com.example.geobeats.BuildConfig // Importamos las variables seguras
+import com.example.geobeats.BuildConfig
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
@@ -10,7 +10,6 @@ import com.spotify.protocol.types.PlayerState
 
 class SpotifyManager(private val context: Context) {
 
-    // Ahora las llaves se leen de forma segura y no están expuestas en el código fuente
     private val CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
     private val REDIRECT_URI = BuildConfig.SPOTIFY_REDIRECT_URI
 
@@ -21,9 +20,8 @@ class SpotifyManager(private val context: Context) {
         onConnected: () -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
-        // 1. ESCUDO: Si ya estamos conectados, solo reproducimos y evitamos reconectar
+        // ESCUDO 1: Si ya estamos conectados, solo cambiamos la playlist y evitamos reconectar
         if (spotifyAppRemote?.isConnected == true) {
-            Log.d("SpotifyManager", "⚡ Ya hay conexión. Reproduciendo...")
             spotifyAppRemote?.playerApi?.play(playlistUri)
             onConnected()
             return
@@ -34,33 +32,31 @@ class SpotifyManager(private val context: Context) {
             .showAuthView(true)
             .build()
 
-        // 2. ESCUDO: Envolver el intento de conexión en un try-catch
+        // ESCUDO 2: Envolver el intento de conexión para evitar cierres forzados de la app
         try {
             SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
                 override fun onConnected(appRemote: SpotifyAppRemote) {
                     spotifyAppRemote = appRemote
-                    Log.d("SpotifyManager", "✅ Conectado a Spotify App Remote!")
                     appRemote.playerApi.play(playlistUri)
 
+                    // Mantenemos la suscripción de forma silenciosa por si en el futuro
+                    // deseas mostrar el nombre de la canción en la interfaz
                     appRemote.playerApi.subscribeToPlayerState()
                         .setEventCallback { playerState: PlayerState ->
                             val track = playerState.track
-                            if (track != null) {
-                                Log.d("SpotifyManager", "🎵 Sonando: ${track.name} - ${track.artist.name}")
-                            }
+                            // Aquí se podría notificar a la UI sobre el track actual
                         }
                     onConnected()
                 }
 
                 override fun onFailure(throwable: Throwable) {
-                    val errorMsg = "❌ Error de conexión: ${throwable.message}"
+                    val errorMsg = "Error de conexión con Spotify App Remote: ${throwable.message}"
                     Log.e("SpotifyManager", errorMsg, throwable)
                     onError(errorMsg)
                 }
             })
         } catch (e: Exception) {
-            // Si la app de Spotify no existe o hay un error fatal, lo atrapamos aquí sin que la app se cierre
-            val errorFatal = "CRÍTICO al conectar: ${e.message}"
+            val errorFatal = "Error crítico al intentar conectar con Spotify: ${e.message}"
             Log.e("SpotifyManager", errorFatal, e)
             onError(errorFatal)
         }
@@ -70,7 +66,6 @@ class SpotifyManager(private val context: Context) {
         spotifyAppRemote?.let {
             SpotifyAppRemote.disconnect(it)
             spotifyAppRemote = null
-            Log.d("SpotifyManager", "🔌 Desconectado de Spotify")
         }
     }
 

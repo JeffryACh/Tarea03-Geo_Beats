@@ -13,23 +13,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.geobeats.model.PointOfInterest
 import com.example.geobeats.spotify.SpotifyManager
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 
 @Composable
-fun MapScreen() {
+fun MapScreen(
+    geoViewModel: GeoViewModel = viewModel()
+) {
     var hasLocationPermission by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val spotifyManager = remember { SpotifyManager(context) }
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // 🛡️ Protección contra Memory Leaks
+    // 1. Cargamos el catálogo completo de lugares
+    val pointsOfInterest = remember { PointOfInterest.obtenerLugares() }
+
     DisposableEffect(Unit) {
         onDispose {
             spotifyManager.disconnect()
-            Log.d("MapScreen", "Limpieza de memoria: Spotify desconectado.")
         }
     }
 
@@ -49,45 +57,66 @@ fun MapScreen() {
         )
     }
 
+    LaunchedEffect(hasLocationPermission) {
+        if (hasLocationPermission) {
+            // 2. Le enviamos la LISTA al ViewModel (esto arregla el error)
+            geoViewModel.startLocationTracking(pointsOfInterest) { playlistUri ->
+                spotifyManager.connectAndPlay(
+                    playlistUri = playlistUri,
+                    onConnected = { Log.d("MapScreen", "Música iniciada por Geofencing") },
+                    onError = { error -> Log.e("MapScreen", "Error: $error") }
+                )
+            }
+        }
+    }
+
     if (hasLocationPermission) {
         MapContainer(
             onMapReady = { googleMap ->
                 googleMap.uiSettings.isZoomControlsEnabled = true
+                googleMap.clear()
 
                 try {
                     googleMap.isMyLocationEnabled = true
+
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        if (location != null) {
+                            val userLatLng = LatLng(location.latitude, location.longitude)
+                            // Hacemos el zoom un poco más lejos (14f) para que se vean varios puntos
+                            googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(userLatLng, 14f))
+                        }
+                    }
                 } catch (e: SecurityException) {
-                    Log.e("MapScreen", "Permisos no concedidos")
+                    Log.e("MapScreen", "Permisos denegados")
                 }
 
-                // 🛡️ Limpiar el mapa antes de dibujar
-                googleMap.clear()
+                // 3. Dibujamos TODOS los marcadores usando un ciclo forEach
+                pointsOfInterest.forEach { point ->
+                    val positionLatLng = LatLng(point.latitude, point.longitude)
 
-                // Definir tu punto de interés
-                val puntoInteres = LatLng(9.8563, -83.9127)
-                val playlistUri = "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1"
-
-                googleMap.addMarker(
-                    MarkerOptions()
-                        .position(puntoInteres)
-                        .title("Campus TEC")
-                )
-
-                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(puntoInteres, 15f))
-
-                // Evento DIRECTO: Comportamiento al tocar el PIN ROJO
-                googleMap.setOnMarkerClickListener { marker ->
-                    Log.d("MapScreen", "Pin rojo tocado: ${marker.title}")
-
-                    // Disparamos la música de una vez
-                    spotifyManager.connectAndPlay(
-                        playlistUri = playlistUri,
-                        onConnected = { Log.d("MapScreen", "¡Música iniciada desde el pin!") },
-                        onError = { error -> Log.e("MapScreen", "Problema al iniciar: $error") }
+                    val marker = googleMap.addMarker(
+                        MarkerOptions()
+                            .position(positionLatLng)
+                            .title(point.name)
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
                     )
 
-                    // Al retornar 'true' le decimos al mapa:
-                    // "Ya me encargué del clic, no muestres el cuadro blanco"
+                    // Guardamos la URI de Spotify "escondida" dentro del marcador (tag)
+                    // para saber qué canción poner cuando lo toquen
+                    marker?.tag = point.spotifyUri
+                }
+
+                // 4. El evento de toque ahora es dinámico y sirve para cualquier marcador
+                googleMap.setOnMarkerClickListener { marker ->
+                    val playlistUri = marker.tag as? String
+
+                    if (playlistUri != null) {
+                        spotifyManager.connectAndPlay(
+                            playlistUri = playlistUri,
+                            onConnected = { Log.d("MapScreen", "Música iniciada por tap en ${marker.title}") },
+                            onError = { error -> Log.e("MapScreen", "Error: $error") }
+                        )
+                    }
                     true
                 }
             }
