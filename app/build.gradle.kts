@@ -32,8 +32,12 @@ android {
         val spotifyClientId = localProperties.getProperty("SPOTIFY_CLIENT_ID") ?: ""
         val spotifyRedirectUri = localProperties.getProperty("SPOTIFY_REDIRECT_URI") ?: ""
 
+        val mapsApiKey = localProperties.getProperty("MAPS_API_KEY") ?: ""
+
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
         buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"$spotifyRedirectUri\"")
+
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {
