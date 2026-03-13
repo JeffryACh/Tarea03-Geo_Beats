@@ -30,6 +30,8 @@ fun MapScreen(
     val spotifyManager = remember { SpotifyManager(context) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
+    //Agregue esto
+    var showPlayer by remember { mutableStateOf(false) }
     // Estados de Permisos
     var hasLocationPermission by remember { mutableStateOf(false) }
 
@@ -98,53 +100,64 @@ fun MapScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (hasLocationPermission) {
-            MapContainer(
-                onMapReady = { googleMap ->
-                    googleMapInstance = googleMap
-                    googleMap.uiSettings.isZoomControlsEnabled = true
+            if (showPlayer) {
+                // Pantalla completa del reproductor
+                PlayerScreen(
+                    spotifyManager = spotifyManager,
+                    onClose = { showPlayer = false }
+                )
+            } else {
+                // El mapa normal
+                MapContainer(
+                    onMapReady = { googleMap ->
+                        googleMapInstance = googleMap
+                        googleMap.uiSettings.isZoomControlsEnabled = true
+                        googleMap.uiSettings.isCompassEnabled = true
 
-                    try {
-                        googleMap.isMyLocationEnabled = true
-                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                            location?.let {
-                                val currentPos = LatLng(it.latitude, it.longitude)
-                                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPos, 15f))
+                        try {
+                            googleMap.isMyLocationEnabled = true
+                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                location?.let {
+                                    val currentPos = LatLng(it.latitude, it.longitude)
+                                    googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPos, 16f))
+                                }
                             }
+                        } catch (e: SecurityException) {
+                            Log.e("MapScreen", "Error de seguridad en GPS")
                         }
-                    } catch (e: SecurityException) {
-                        Log.e("Map", "Error de seguridad en GPS")
-                    }
 
-                    // Evento: Crear nuevo (Pulsación larga)
-                    googleMap.setOnMapLongClickListener { latLng ->
-                        editingPoint = null
-                        tempLatLng = latLng
-                        placeName = ""
-                        playlistUri = ""
-                        showDialog = true
-                    }
+                        // Pulsación larga → nuevo punto
+                        googleMap.setOnMapLongClickListener { latLng ->
+                            editingPoint = null
+                            tempLatLng = latLng
+                            placeName = ""
+                            playlistUri = ""
+                            showDialog = true
+                        }
 
-                    // Evento: Inspeccionar/Editar (Pulsación normal)
-                    googleMap.setOnMarkerClickListener { marker ->
-                        val pointId = marker.tag as? String
-                        val point = pointsOfInterest.find { it.id == pointId }
+                        // Pulsación normal en marcador → abre reproductor
+                        googleMap.setOnMarkerClickListener { marker ->
+                            val pointId = marker.tag as? String
+                            val point = pointsOfInterest.find { it.id == pointId }
 
-                        if (point != null) {
-                            if (point.id.startsWith("custom")) {
-                                editingPoint = point
-                                placeName = point.name
-                                playlistUri = point.spotifyUri
-                                showDialog = true
-                            } else {
-                                spotifyManager.connectAndPlay(point.spotifyUri)
+                            if (point != null) {
+                                if (point.id.startsWith("custom")) {
+                                    editingPoint = point
+                                    placeName = point.name
+                                    playlistUri = point.spotifyUri
+                                    showDialog = true
+                                } else {
+                                    spotifyManager.connectAndPlay(point.spotifyUri)
+                                    showPlayer = true          // ← Aquí abre el reproductor
+                                }
                             }
+                            true
                         }
-                        true
                     }
-                }
-            )
+                )
+            }
         } else {
-            // Pantalla de espera más descriptiva
+            // Pantalla de permisos (sin cambios)
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
@@ -153,37 +166,48 @@ fun MapScreen(
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Esperando permisos de ubicación...")
-                Button(onClick = {
-                    permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-                }) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) }) {
                     Text("Conceder Permisos")
                 }
             }
         }
 
-        // Diálogo de Gestión (Crear / Editar / Borrar)
-        if (showDialog) {
+        // Diálogo de Crear/Editar (solo se muestra cuando NO está el reproductor)
+        if (showDialog && !showPlayer) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                title = { Text(if (editingPoint == null) "Nuevo Punto" else "Editar Punto") },
+                title = { Text(if (editingPoint == null) "Nuevo Punto de Interés" else "Editar Punto") },
                 text = {
                     Column {
-                        OutlinedTextField(value = placeName, onValueChange = { placeName = it }, label = { Text("Nombre") })
+                        OutlinedTextField(
+                            value = placeName,
+                            onValueChange = { placeName = it },
+                            label = { Text("Nombre del lugar") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(value = playlistUri, onValueChange = { playlistUri = it }, label = { Text("Spotify URI") })
+                        OutlinedTextField(
+                            value = playlistUri,
+                            onValueChange = { playlistUri = it },
+                            label = { Text("Spotify URI (playlist)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
                         if (editingPoint == null) {
                             tempLatLng?.let {
-                                pointsOfInterest.add(PointOfInterest(
-                                    id = "custom_${UUID.randomUUID()}",
-                                    name = placeName.ifBlank { "Punto Manual" },
-                                    latitude = it.latitude,
-                                    longitude = it.longitude,
-                                    spotifyUri = playlistUri.ifBlank { "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1" }
-                                ))
+                                pointsOfInterest.add(
+                                    PointOfInterest(
+                                        id = "custom_${UUID.randomUUID()}",
+                                        name = placeName.ifBlank { "Punto Personalizado" },
+                                        latitude = it.latitude,
+                                        longitude = it.longitude,
+                                        spotifyUri = playlistUri.ifBlank { "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1" }
+                                    )
+                                )
                             }
                         } else {
                             val index = pointsOfInterest.indexOfFirst { it.id == editingPoint?.id }

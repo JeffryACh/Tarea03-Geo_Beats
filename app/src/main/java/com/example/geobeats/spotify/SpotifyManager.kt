@@ -7,6 +7,9 @@ import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.protocol.types.PlayerState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class SpotifyManager(private val context: Context) {
 
@@ -14,7 +17,8 @@ class SpotifyManager(private val context: Context) {
     private val REDIRECT_URI = BuildConfig.SPOTIFY_REDIRECT_URI
 
     private var spotifyAppRemote: SpotifyAppRemote? = null
-
+    private val _playerState = MutableStateFlow<PlayerState?>(null)
+    val playerState: StateFlow<PlayerState?> = _playerState.asStateFlow()
     fun connectAndPlay(
         playlistUri: String,
         onConnected: () -> Unit = {},
@@ -39,12 +43,13 @@ class SpotifyManager(private val context: Context) {
                     spotifyAppRemote = appRemote
                     appRemote.playerApi.play(playlistUri)
 
-                    // Mantenemos la suscripción de forma silenciosa por si en el futuro
-                    // deseas mostrar el nombre de la canción en la interfaz
+                    // Suscripción al estado (nombre de canción, artista, pausa, etc.)
                     appRemote.playerApi.subscribeToPlayerState()
-                        .setEventCallback { playerState: PlayerState ->
-                            val track = playerState.track
-                            // Aquí se podría notificar a la UI sobre el track actual
+                        .setEventCallback { state: PlayerState ->
+                            _playerState.value = state
+                        }
+                        .setErrorCallback { throwable ->
+                            Log.e("SpotifyManager", "Error en player state", throwable)
                         }
                     onConnected()
                 }
@@ -62,14 +67,19 @@ class SpotifyManager(private val context: Context) {
         }
     }
 
+    fun resume() {
+        spotifyAppRemote?.playerApi?.resume()
+    }
+
+    fun pause() {
+        spotifyAppRemote?.playerApi?.pause()
+    }
+
     fun disconnect() {
         spotifyAppRemote?.let {
             SpotifyAppRemote.disconnect(it)
             spotifyAppRemote = null
         }
-    }
-
-    fun pause() {
-        spotifyAppRemote?.playerApi?.pause()
+        _playerState.value = null
     }
 }
