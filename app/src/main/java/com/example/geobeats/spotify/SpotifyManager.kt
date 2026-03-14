@@ -82,4 +82,11 @@ class SpotifyManager(private val context: Context) {
         }
         _playerState.value = null
     }
+    fun skipNext() {
+        spotifyAppRemote?.playerApi?.skipNext()
+    }
+
+    fun skipPrevious() {
+        spotifyAppRemote?.playerApi?.skipPrevious()
+    }
 }
