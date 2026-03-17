@@ -32,6 +32,7 @@ fun MapScreen(
 
     //Agregue esto
     var showPlayer by remember { mutableStateOf(false) }
+    var selectedCustomPoint by remember { mutableStateOf<PointOfInterest?>(null) }
     // Estados de Permisos
     var hasLocationPermission by remember { mutableStateOf(false) }
 
@@ -142,10 +143,11 @@ fun MapScreen(
 
                             if (point != null) {
                                 if (point.id.startsWith("custom")) {
-                                    editingPoint = point
-                                    placeName = point.name
-                                    playlistUri = point.spotifyUri
-                                    showDialog = true
+                                    // Para custom → mostramos opciones
+                                    selectedCustomPoint = point
+                                    // No consumimos el evento aquí para que el info window default aparezca si quieres
+                                    // O pon true si prefieres que no aparezca nada por defecto
+                                    false
                                 } else {
                                     spotifyManager.connectAndPlay(point.spotifyUri)
                                     showPlayer = true          // ← Aquí abre el reproductor
@@ -233,5 +235,53 @@ fun MapScreen(
                 }
             )
         }
+    }
+    if (selectedCustomPoint != null) {
+        AlertDialog(
+            onDismissRequest = { selectedCustomPoint = null },
+            title = { Text("Opciones para ${selectedCustomPoint?.name}") },
+            text = {
+                Column {
+                    Text("¿Qué deseas hacer con este punto personalizado?")
+                }
+            },
+            confirmButton = {
+                // Botón Reproducir
+                TextButton(
+                    onClick = {
+                        spotifyManager.connectAndPlay(selectedCustomPoint!!.spotifyUri)
+                        showPlayer = true
+                        selectedCustomPoint = null
+                    }
+                ) {
+                    Text("Reproducir")
+                }
+            },
+            dismissButton = {
+                Row {
+                    // Botón Editar
+                    TextButton(
+                        onClick = {
+                            editingPoint = selectedCustomPoint
+                            placeName = selectedCustomPoint!!.name
+                            playlistUri = selectedCustomPoint!!.spotifyUri
+                            showDialog = true
+                            selectedCustomPoint = null
+                        }
+                    ) {
+                        Text("Editar")
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Botón Cancelar (o Borrar si quieres agregarlo)
+                    TextButton(
+                        onClick = { selectedCustomPoint = null }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            }
+        )
     }
 }
