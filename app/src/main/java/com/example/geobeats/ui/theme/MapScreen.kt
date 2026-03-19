@@ -24,24 +24,25 @@ import java.util.UUID
 
 @Composable
 fun MapScreen(
-    geoViewModel: GeoViewModel = viewModel()
+    geoViewModel: GeoViewModel = viewModel(),
+    spotifyManager: SpotifyManager,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val spotifyManager = remember { SpotifyManager(context) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    //Agregue esto
-    var showPlayer by remember { mutableStateOf(false) }
-    var selectedCustomPoint by remember { mutableStateOf<PointOfInterest?>(null) }
     // Estados de Permisos
     var hasLocationPermission by remember { mutableStateOf(false) }
 
-    // Estados de la interfaz
+    // Estados de la interfaz para CRUD de puntos
     var showDialog by remember { mutableStateOf(false) }
     var editingPoint by remember { mutableStateOf<PointOfInterest?>(null) }
     var tempLatLng by remember { mutableStateOf<LatLng?>(null) }
     var placeName by remember { mutableStateOf("") }
     var playlistUri by remember { mutableStateOf("") }
+
+    // NUEVO ESTADO: Para guardar la URI cuando entramos a una geocerca
+    var pendingUriToPlay by remember { mutableStateOf<String?>(null) }
 
     // Referencias y Datos
     var googleMapInstance by remember { mutableStateOf<GoogleMap?>(null) }
@@ -51,7 +52,6 @@ fun MapScreen(
         }
     }
 
-    // Gestor de permisos
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -59,7 +59,6 @@ fun MapScreen(
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
-    // Lanzar petición de permisos al iniciar
     LaunchedEffect(Unit) {
         permissionLauncher.launch(
             arrayOf(
@@ -69,15 +68,13 @@ fun MapScreen(
         )
     }
 
-    // Sincronización de Geocercas y Dibujo de Marcadores
     LaunchedEffect(hasLocationPermission, pointsOfInterest.size, googleMapInstance) {
         if (hasLocationPermission) {
-            // Activar rastreo
+            // CAMBIO AQUÍ: En lugar de reproducir directamente, guardamos la URI pendiente
             geoViewModel.startLocationTracking(pointsOfInterest) { uri ->
-                spotifyManager.connectAndPlay(playlistUri = uri)
+                pendingUriToPlay = uri
             }
 
-            // Redibujar marcadores
             googleMapInstance?.let { map ->
                 map.clear()
                 pointsOfInterest.forEach { point ->
@@ -95,71 +92,52 @@ fun MapScreen(
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { spotifyManager.disconnect() }
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         if (hasLocationPermission) {
-            if (showPlayer) {
-                // Pantalla completa del reproductor
-                PlayerScreen(
-                    spotifyManager = spotifyManager,
-                    onClose = { showPlayer = false }
-                )
-            } else {
-                // El mapa normal
-                MapContainer(
-                    onMapReady = { googleMap ->
-                        googleMapInstance = googleMap
-                        googleMap.uiSettings.isZoomControlsEnabled = true
-                        googleMap.uiSettings.isCompassEnabled = true
+            MapContainer(
+                onMapReady = { googleMap ->
+                    googleMapInstance = googleMap
+                    googleMap.uiSettings.isZoomControlsEnabled = true
 
-                        try {
-                            googleMap.isMyLocationEnabled = true
-                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                location?.let {
-                                    val currentPos = LatLng(it.latitude, it.longitude)
-                                    googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPos, 16f))
-                                }
+                    try {
+                        googleMap.isMyLocationEnabled = true
+                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                            location?.let {
+                                val currentPos = LatLng(it.latitude, it.longitude)
+                                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentPos, 15f))
                             }
-                        } catch (e: SecurityException) {
-                            Log.e("MapScreen", "Error de seguridad en GPS")
                         }
-
-                        // Pulsación larga → nuevo punto
-                        googleMap.setOnMapLongClickListener { latLng ->
-                            editingPoint = null
-                            tempLatLng = latLng
-                            placeName = ""
-                            playlistUri = ""
-                            showDialog = true
-                        }
-
-                        // Pulsación normal en marcador → abre reproductor
-                        googleMap.setOnMarkerClickListener { marker ->
-                            val pointId = marker.tag as? String
-                            val point = pointsOfInterest.find { it.id == pointId }
-
-                            if (point != null) {
-                                if (point.id.startsWith("custom")) {
-                                    // Para custom → mostramos opciones
-                                    selectedCustomPoint = point
-                                    // No consumimos el evento aquí para que el info window default aparezca si quieres
-                                    // O pon true si prefieres que no aparezca nada por defecto
-                                    false
-                                } else {
-                                    spotifyManager.connectAndPlay(point.spotifyUri)
-                                    showPlayer = true          // ← Aquí abre el reproductor
-                                }
-                            }
-                            true
-                        }
+                    } catch (e: SecurityException) {
+                        Log.e("Map", "Error de seguridad en GPS")
                     }
-                )
-            }
+
+                    googleMap.setOnMapLongClickListener { latLng ->
+                        editingPoint = null
+                        tempLatLng = latLng
+                        placeName = ""
+                        playlistUri = ""
+                        showDialog = true
+                    }
+
+                    googleMap.setOnMarkerClickListener { marker ->
+                        val pointId = marker.tag as? String
+                        val point = pointsOfInterest.find { it.id == pointId }
+
+                        if (point != null) {
+                            if (point.id.startsWith("custom")) {
+                                editingPoint = point
+                                placeName = point.name
+                                playlistUri = point.spotifyUri
+                                showDialog = true
+                            } else {
+                                spotifyManager.connectAndPlay(point.spotifyUri)
+                            }
+                        }
+                        true
+                    }
+                }
+            )
         } else {
-            // Pantalla de permisos (sin cambios)
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
@@ -168,48 +146,37 @@ fun MapScreen(
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Esperando permisos de ubicación...")
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) }) {
+                Button(onClick = {
+                    permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+                }) {
                     Text("Conceder Permisos")
                 }
             }
         }
 
-        // Diálogo de Crear/Editar (solo se muestra cuando NO está el reproductor)
-        if (showDialog && !showPlayer) {
+        // Diálogo para Crear o Editar un punto manual
+        if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                title = { Text(if (editingPoint == null) "Nuevo Punto de Interés" else "Editar Punto") },
+                title = { Text(if (editingPoint == null) "Nuevo Punto" else "Editar Punto") },
                 text = {
                     Column {
-                        OutlinedTextField(
-                            value = placeName,
-                            onValueChange = { placeName = it },
-                            label = { Text("Nombre del lugar") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = placeName, onValueChange = { placeName = it }, label = { Text("Nombre") })
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = playlistUri,
-                            onValueChange = { playlistUri = it },
-                            label = { Text("Spotify URI (playlist)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = playlistUri, onValueChange = { playlistUri = it }, label = { Text("Spotify URI") })
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
                         if (editingPoint == null) {
                             tempLatLng?.let {
-                                pointsOfInterest.add(
-                                    PointOfInterest(
-                                        id = "custom_${UUID.randomUUID()}",
-                                        name = placeName.ifBlank { "Punto Personalizado" },
-                                        latitude = it.latitude,
-                                        longitude = it.longitude,
-                                        spotifyUri = playlistUri.ifBlank { "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1" }
-                                    )
-                                )
+                                pointsOfInterest.add(PointOfInterest(
+                                    id = "custom_${UUID.randomUUID()}",
+                                    name = placeName.ifBlank { "Punto Manual" },
+                                    latitude = it.latitude,
+                                    longitude = it.longitude,
+                                    spotifyUri = playlistUri.ifBlank { "spotify:playlist:37i9dQZF1DXcBWIGOYBMm1" }
+                                ))
                             }
                         } else {
                             val index = pointsOfInterest.indexOfFirst { it.id == editingPoint?.id }
@@ -235,53 +202,30 @@ fun MapScreen(
                 }
             )
         }
-    }
-    if (selectedCustomPoint != null) {
-        AlertDialog(
-            onDismissRequest = { selectedCustomPoint = null },
-            title = { Text("Opciones para ${selectedCustomPoint?.name}") },
-            text = {
-                Column {
-                    Text("¿Qué deseas hacer con este punto personalizado?")
-                }
-            },
-            confirmButton = {
-                // Botón Reproducir
-                TextButton(
-                    onClick = {
-                        spotifyManager.connectAndPlay(selectedCustomPoint!!.spotifyUri)
-                        showPlayer = true
-                        selectedCustomPoint = null
-                    }
-                ) {
-                    Text("Reproducir")
-                }
-            },
-            dismissButton = {
-                Row {
-                    // Botón Editar
-                    TextButton(
-                        onClick = {
-                            editingPoint = selectedCustomPoint
-                            placeName = selectedCustomPoint!!.name
-                            playlistUri = selectedCustomPoint!!.spotifyUri
-                            showDialog = true
-                            selectedCustomPoint = null
-                        }
-                    ) {
-                        Text("Editar")
-                    }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+        // NUEVO DIÁLOGO: Aparece cuando entras al radio de un punto
+        pendingUriToPlay?.let { uri ->
+            val puntoCercano = pointsOfInterest.find { it.spotifyUri == uri }
+            val nombreLugar = puntoCercano?.name ?: "este Geo-Beat"
 
-                    // Botón Cancelar (o Borrar si quieres agregarlo)
-                    TextButton(
-                        onClick = { selectedCustomPoint = null }
-                    ) {
-                        Text("Cancelar")
+            AlertDialog(
+                onDismissRequest = { pendingUriToPlay = null },
+                title = { Text("🎵 ¡Música Detectada!") },
+                text = { Text("Has entrado al rango de $nombreLugar. ¿Quieres sintonizar su banda sonora?") },
+                confirmButton = {
+                    Button(onClick = {
+                        spotifyManager.connectAndPlay(playlistUri = uri)
+                        pendingUriToPlay = null // Cerramos el diálogo después de reproducir
+                    }) {
+                        Text("Reproducir")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingUriToPlay = null }) {
+                        Text("Ignorar")
                     }
                 }
-            }
-        )
+            )
+        }
     }
 }

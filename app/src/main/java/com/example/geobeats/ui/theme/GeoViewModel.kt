@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.geobeats.location.DistanceCalculator
 import com.example.geobeats.location.LocationClient
 import com.example.geobeats.model.PointOfInterest
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -13,39 +14,55 @@ import kotlinx.coroutines.flow.onEach
 class GeoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val locationClient = LocationClient(application)
+    private var trackingJob: Job? = null
 
-    // Usamos un Set para recordar en qué geocercas ya entramos y no repetir la música
-    private val triggeredGeofences = mutableSetOf<String>()
+    // Memoria del último punto visitado
+    private var lastVisitedPointId: String? = null
 
-    fun startLocationTracking(
-        points: List<PointOfInterest>,
-        onEnterGeofence: (String) -> Unit
-    ) {
-        locationClient.getLocationUpdates()
-            .catch { e -> e.printStackTrace() } // Captura errores silenciosamente
+    fun startLocationTracking(points: List<PointOfInterest>, onEnterGeofence: (String) -> Unit) {
+        // Cancelamos el rastreo anterior si la lista de puntos cambió
+        trackingJob?.cancel()
+
+        // CORRECCIÓN 1: Se quitó el "5000L" porque la función no recibe parámetros
+        trackingJob = locationClient.getLocationUpdates()
+            .catch { e -> e.printStackTrace() }
             .onEach { location ->
+                var insideAnyGeofence = false
 
-                // Evaluamos la distancia contra TODOS los puntos de la lista
-                points.forEach { point ->
+                for (point in points) {
+                    // CORRECCIÓN 2: Se cambió "calculateDistance" por "haversine"
                     val distance = DistanceCalculator.haversine(
                         location.latitude, location.longitude,
                         point.latitude, point.longitude
                     )
 
-                    // 1. Si entramos al radio y la música de este punto NO había sonado
-                    if (distance <= point.triggerRadiusMeters && !triggeredGeofences.contains(point.id)) {
+                    // Validamos si entramos al radio de 50 metros (usamos 50.0 porque haversine devuelve Double)
+                    if (distance <= 50.0) {
+                        insideAnyGeofence = true
 
-                        triggeredGeofences.add(point.id) // Ponemos el seguro
-                        onEnterGeofence(point.spotifyUri) // Disparamos Spotify
+                        // ¿Es un punto nuevo o seguimos en el mismo?
+                        if (lastVisitedPointId != point.id) {
+                            lastVisitedPointId = point.id
+                            // Disparamos la señal hacia la interfaz gráfica (MapScreen)
+                            onEnterGeofence(point.spotifyUri)
+                        }
 
-                        // 2. Si salimos del radio, quitamos el seguro
-                    } else if (distance > point.triggerRadiusMeters && triggeredGeofences.contains(point.id)) {
-
-                        triggeredGeofences.remove(point.id) // Listo para volver a sonar si regresamos
-
+                        // Como ya encontramos el punto más cercano, dejamos de iterar la lista
+                        break
                     }
+                }
+
+                // Mecanismo de "Enfriamiento" (Cooldown)
+                // Si el GPS detecta que salimos del radio de TODOS los puntos, borramos la memoria.
+                if (!insideAnyGeofence) {
+                    lastVisitedPointId = null
                 }
             }
             .launchIn(viewModelScope)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        trackingJob?.cancel()
     }
 }

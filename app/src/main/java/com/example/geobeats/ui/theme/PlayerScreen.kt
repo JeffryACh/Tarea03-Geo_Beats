@@ -1,172 +1,125 @@
 package com.example.geobeats.ui.theme
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.geobeats.spotify.SpotifyManager
 
 @Composable
 fun PlayerScreen(
     spotifyManager: SpotifyManager,
-    onClose: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    val playerState by spotifyManager.playerState.collectAsState()
-    val track = playerState?.track
-    val isPaused = playerState?.isPaused ?: true
+    // 1. OBSERVADOR MÁGICO: Escucha los cambios del StateFlow en tiempo real
+    // (Esto soluciona los errores de "getValue" y "playerState")
+    val trackState by spotifyManager.trackState.collectAsState()
 
-    // URL de la carátula real de Spotify (versión limpia y sin errores)
-    val albumArtUrl: String = track?.imageUri?.let { imageUri ->
-        val imageUrl = imageUri.toString()
-        if (imageUrl.startsWith("spotify:image:")) {
-            "https://i.scdn.co/image/" + imageUrl.substringAfter("spotify:image:")
-        } else {
-            imageUrl
-        }
-    } ?: ""
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF000000)
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Decoración superior GeoBeats (solo visual)
-            Box(
-                modifier = Modifier
-                    .height(36.dp)
-                    .background(Color(0xFF0066FF), shape = RoundedCornerShape(50))
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.Center
+            // 2. RENDERIZADO DE IMAGEN NATIVO
+            // (Esto soluciona los errores de "Coil" y "AsyncImage")
+            if (trackState.imageBitmap != null) {
+                Image(
+                    bitmap = trackState.imageBitmap!!.asImageBitmap(),
+                    contentDescription = "Carátula del álbum",
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // Placeholder gris por si la imagen aún no ha cargado
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Gray.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🎵", fontSize = 24.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // 3. TEXTOS DINÁMICOS
+            // (Esto soluciona los errores de "track")
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "GeoBeats",
-                    fontSize = 16.sp,
+                    text = trackState.trackName,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = trackState.artistName,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Reproduciendo Música",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Recuadro del álbum con foto real
-            Box(
-                modifier = Modifier
-                    .size(280.dp)
-                    .background(Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (albumArtUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = albumArtUrl,
-                        contentDescription = "Carátula del álbum",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        text = "Album",
-                        fontSize = 28.sp,
-                        color = Color(0xFF666666),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Text(
-                text = track?.name ?: "Nombre de la canción",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = track?.artist?.name ?: "Autor",
-                fontSize = 16.sp,
-                color = Color(0xFFB3B3B3),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Slider(
-                value = 0.45f,
-                onValueChange = {},
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color(0xFF0066FF),
-                    inactiveTrackColor = Color(0xFF444444)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
+            // 4. CONTROLES DE REPRODUCCIÓN
+            // (Esto soluciona los errores de iconos no resueltos)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(32.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { spotifyManager.skipPrevious() }) {
-                    Icon(Icons.Filled.SkipPrevious, "Anterior", tint = Color.White, modifier = Modifier.size(36.dp))
+                    Icon(imageVector = Icons.Default.SkipPrevious, contentDescription = "Anterior")
                 }
 
-                IconButton(
-                    onClick = { if (isPaused) spotifyManager.resume() else spotifyManager.pause() },
-                    modifier = Modifier.size(72.dp).background(Color(0xFF0066FF), CircleShape)
-                ) {
+                IconButton(onClick = {
+                    if (trackState.isPaused) {
+                        spotifyManager.resume()
+                    } else {
+                        spotifyManager.pause()
+                    }
+                }) {
                     Icon(
-                        if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                        contentDescription = if (isPaused) "Play" else "Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
+                        imageVector = if (trackState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (trackState.isPaused) "Reproducir" else "Pausar",
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
                 IconButton(onClick = { spotifyManager.skipNext() }) {
-                    Icon(Icons.Filled.SkipNext, "Siguiente", tint = Color.White, modifier = Modifier.size(36.dp))
+                    Icon(imageVector = Icons.Default.SkipNext, contentDescription = "Siguiente")
                 }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = {
-                    spotifyManager.disconnect()
-                    onClose()
-                },
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF)),
-                modifier = Modifier.fillMaxWidth(0.6f).height(48.dp)
-            ) {
-                Text("Volver", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
