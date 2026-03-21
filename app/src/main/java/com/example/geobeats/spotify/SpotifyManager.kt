@@ -95,15 +95,24 @@ class SpotifyManager(private val context: Context) {
                 }
 
                 override fun onFailure(throwable: Throwable) {
-                    val errorMsg = "FALLO CRÍTICO DE CONEXIÓN: ${throwable.message}"
-                    Log.e("SpotifyManager", errorMsg, throwable)
-                    Log.e("SpotifyManager", "Causa detallada: ${throwable.cause}")
-                    onError(errorMsg)
+                    val errorType = throwable.javaClass.simpleName
+                    val errorMessage = throwable.message ?: "Sin mensaje detallado"
+                    val fullError = "FALLO EN CONEXIÓN: $errorType - $errorMessage"
+
+                    Log.e("SpotifyManager", fullError, throwable)
+                    Log.e("SpotifyManager", "Tipo completo: ${throwable.javaClass.name}")
+                    Log.e("SpotifyManager", "Causa: ${throwable.cause ?: "null"}")
+                    Log.e("SpotifyManager", "Stacktrace inicial: ${Log.getStackTraceString(throwable)}")
+
+                    onError(fullError)  // o pasa el tipo si modificas la firma del callback
                 }
             })
         } catch (e: Exception) {
-            Log.e("SpotifyManager", "EXCEPCIÓN INTERNA AL CONECTAR: ${e.message}", e)
-            onError(e.message ?: "Error desconocido")
+            if (e is android.content.ActivityNotFoundException) {
+                onError("Spotify no está instalado. Instálalo para continuar.")
+            } else {
+                onError("Error inesperado: ${e.message}")
+            }
         }
     }
 

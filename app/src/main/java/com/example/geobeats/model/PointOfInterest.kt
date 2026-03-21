@@ -37,6 +37,33 @@ data class PointOfInterest(
                     // Playlist de éxitos urbanos/pop para tiendas
                     spotifyUri = "spotify:playlist:37i9dQZF1DX10zKzsJ2jva",
                     triggerRadiusMeters = 50.0
+                ),
+                PointOfInterest(
+                    id = "casa turrialba",
+                    name = "casa turrialba",
+                    latitude = 9.907827,
+                    longitude = -83.677046,
+                    // Playlist de linkin park
+                    spotifyUri = "spotify:playlist:37i9dQZF1DZ06evO47cwRq",
+                    triggerRadiusMeters = 50.0
+                ),
+                PointOfInterest(
+                    id = "b6",
+                    name = "b6",
+                    latitude = 9.856686,
+                    longitude = -83.911992,
+                    // Playlist de the weekend
+                    spotifyUri = "spotify:playlist:2c4NRJdLK7kgZ0tCVcwgOI",
+                    triggerRadiusMeters = 50.0
+                ),
+                PointOfInterest(
+                    id = "b3",
+                    name = "b3",
+                    latitude = 9.856425,
+                    longitude = -83.912592,
+                    // Playlist de linkin park
+                    spotifyUri = "spotify:playlist:37i9dQZF1DZ06evO1SVXaM",
+                    triggerRadiusMeters = 50.0
                 )
             )
         }
